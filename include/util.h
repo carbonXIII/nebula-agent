@@ -7,6 +7,20 @@
 #include <atomic>
 
 namespace util {
+  namespace detail {
+    // Type acts as a tag to find the correct operator| overload
+    template <typename C>
+    struct to_helper {
+    };
+
+    // This actually does the work
+    template <typename Container, std::ranges::range R>
+    requires std::convertible_to<std::ranges::range_value_t<R>, typename Container::value_type>
+    Container operator|(R&& r, to_helper<Container>) {
+      return Container{r.begin(), r.end()};
+    }
+  }
+
   constexpr auto change_byte_order(auto x) {
     if constexpr(std::endian::native != std::endian::big) {
       return std::byteswap(x);
@@ -61,4 +75,17 @@ namespace util {
   auto with_timeout(std::chrono::system_clock::duration timeout, Args... args) {
     return WithTimeout<func, std::remove_reference_t<Args>...>(timeout, std::forward<Args>(args)...);
   }
+
+  // Couldn't find an concept for container, however a
+  // container is a range, but not a view.
+  template <std::ranges::range Container> requires (!std::ranges::view<Container>)
+  auto to() { return detail::to_helper<Container>{}; }
+
+  template <typename T>
+  auto from_string_view(auto s) {
+    T ret;
+    auto [ptr, ec] = std::from_chars(s.begin(), s.end(), ret);
+    if(ec != std::errc()) throw std::runtime_error("FIXME");
+    return ret;
+  };
 }
